@@ -199,6 +199,10 @@ const server = http.createServer(async (req, res) => {
 });
 
 // ✅ خلي البورت نفس اللي شغال عندك (3002)
-server.listen(3002, () => {
-  console.log("Server running on http://localhost:3002");
+const PORT = process.env.PORT || 3002;
+
+server.listen(PORT, "0.0.0.0", () => {
+  console.log("Server running on port " + PORT);
 });
+
+
