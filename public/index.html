@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>🌳 Nivara — تحدث مع الشجرة</title>
+  <style>
+    body{
+      font-family: system-ui;
+      background:#f4f7f5;
+      max-width: 760px;
+      margin: 28px auto;
+      padding: 14px;
+    }
+    .card{
+      background:#fff;
+      border:1px solid #e6e6e6;
+      border-radius:16px;
+      padding:16px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+    }
+    .header{
+      display:flex;align-items:center;justify-content:space-between;
+      gap:12px;flex-wrap:wrap;margin-bottom:12px;
+    }
+    .title{display:flex;align-items:center;gap:10px;}
+    .tree{
+      width:42px;height:42px;border-radius:14px;
+      display:grid;place-items:center;background:#e6f2ec;font-size:24px;
+    }
+    h2{margin:0;font-size:20px}
+    .sub{margin:0;color:#666;font-size:13px}
+    .chat{
+      background:#f7faf8;border:1px solid #e8eeea;border-radius:14px;
+      padding:12px;height:280px;overflow:auto;white-space:pre-wrap;
+    }
+    .msg{margin:8px 0;line-height:1.5;}
+    .me{color:#111}
+    .bot{color:#0b5}
+    .row{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;align-items:center;}
+    input[type="text"]{
+      flex:1;min-width:220px;padding:12px;font-size:16px;
+      border-radius:12px;border:1px solid #d7dfda;outline:none;
+    }
+    input[type="file"]{
+      width:100%;
+      margin-top:10px;
+    }
+    button{
+      padding:12px 14px;border:0;border-radius:12px;cursor:pointer;font-size:15px;
+    }
+    .btn-main{background:#0b5;color:#fff}
+    .btn-ghost{background:#eef3f0}
+    .hint{color:#666;font-size:12px;margin-top:10px}
+  </style>
+</head>
+
+<body>
+  <div class="card">
+    <div class="header">
+      <div class="title">
+        <div class="tree">🌳</div>
+        <div>
+          <h2>Nivara — تحدث مع الشجرة</h2>
+          <p class="sub">نص + صوت + تحليل صورة (Vision)</p>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-ghost" onclick="stopSpeak()">إيقاف الصوت</button>
+        <button class="btn-ghost" onclick="clearChat()">مسح المحادثة</button>
+        <button class="btn-ghost" onclick="resetMemory()">Reset ذاكرة السيرفر</button>
+      </div>
+    </div>
+
+    <div id="chat" class="chat"></div>
+
+    <div class="row">
+      <input id="msg" type="text" placeholder="اكتب كلامك هنا..." onkeydown="if(event.key==='Enter'){talk()}" />
+      <button class="btn-main" onclick="talk()">احكي 🌿</button>
+    </div>
+
+    <div style="margin-top:12px">
+      <input type="file" id="imageInput" accept="image/*" />
+      <div class="row">
+        <button class="btn-ghost" onclick="sendImage()">حلّل الصورة 📷</button>
+      </div>
+    </div>
+
+    <div class="hint">
+      جرّب: “مرحبا” — “كيفك” — “اعطيني نصيحة”  
+      أو ارفع صورة شجرة/نبتة وخلي Nivara تشرح شو فيها.
+    </div>
+  </div>
+
+<script>
+  const chatEl = document.getElementById("chat");
+  const inputEl = document.getElementById("msg");
+  const fileEl  = document.getElementById("imageInput");
+
+  const key = "nivara_chat_v2";
+  const chat = JSON.parse(localStorage.getItem(key) || "[]");
+
+  function render(){
+    chatEl.textContent = "";
+    for (const m of chat){
+      const div = document.createElement("div");
+      div.className = "msg " + (m.role === "me" ? "me" : "bot");
+      div.textContent = (m.role === "me" ? "أنا: " : "Nivara: ") + m.text;
+      chatEl.appendChild(div);
+    }
+    chatEl.scrollTop = chatEl.scrollHeight;
+    localStorage.setItem(key, JSON.stringify(chat));
+  }
+
+  function stopSpeak(){ speechSynthesis.cancel(); }
+
+  function speak(text){
+    stopSpeak();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = "ar-JO";
+    utter.rate = 0.9;
+    utter.pitch = 1;
+    speechSynthesis.speak(utter);
+  }
+
+  function clearChat(){
+    stopSpeak();
+    chat.length = 0;
+    render();
+  }
+
+  async function resetMemory(){
+    try{
+      await fetch("/reset");
+      chat.push({ role:"bot", text:"✅ مسحت ذاكرة السيرفر (السياق)"});
+      render();
+    }catch{
+      chat.push({ role:"bot", text:"❌ ما قدرت أمسح ذاكرة السيرفر"});
+      render();
+    }
+  }
+
+  async function talk(){
+    const text = inputEl.value.trim();
+    if(!text) return;
+
+    chat.push({ role:"me", text });
+    render();
+    inputEl.value = "";
+
+    const res = await fetch("/talk?msg=" + encodeURIComponent(text));
+    const reply = await res.text();
+
+    chat.push({ role:"bot", text: reply });
+    render();
+    speak(reply);
+  }
+
+  async function sendImage(){
+    if(!fileEl.files.length){
+      alert("ارفع صورة أولاً");
+      return;
+    }
+
+    const file = fileEl.files[0];
+    chat.push({ role:"me", text: "📷 رفعت صورة: " + file.name });
+    render();
+
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error("File read failed"));
+      reader.readAsDataURL(file);
+    });
+
+    const res = await fetch("/vision", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image: dataUrl })
+    });
+
+    const reply = await res.text();
+    chat.push({ role:"bot", text: reply });
+    render();
+    speak(reply);
+  }
+
+  render();
+</script>
+</body>
+</html>
