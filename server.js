@@ -69,7 +69,7 @@ async function callOpenAI(input) {
     body: JSON.stringify({
       model: "gpt-5.1-chat-latest",
       input,
-      temperature: 0.6,
+      
       store: false,
     }),
   });
@@ -204,5 +204,6 @@ const PORT = process.env.PORT || 3002;
 server.listen(PORT, "0.0.0.0", () => {
   console.log("Server running on port " + PORT);
 });
+
 
 
