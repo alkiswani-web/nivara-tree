@@ -59,6 +59,41 @@ function extractOutputText(data) {
   return text.trim();
 }
 
+// ✅ هنا المهم: نلتقط JSON حتى لو كان داخل ```json``` أو قبله نص
+function safeParseModelJson(raw) {
+  if (!raw || typeof raw !== "string") return null;
+
+  // 1) جرّب parse مباشر
+  try {
+    const obj = JSON.parse(raw);
+    if (obj && typeof obj === "object") return obj;
+  } catch {}
+
+  // 2) شيل ```json و ```
+  let cleaned = raw.trim();
+  cleaned = cleaned.replace(/^```json\s*/i, "");
+  cleaned = cleaned.replace(/^```\s*/i, "");
+  cleaned = cleaned.replace(/```$/i, "").trim();
+
+  try {
+    const obj = JSON.parse(cleaned);
+    if (obj && typeof obj === "object") return obj;
+  } catch {}
+
+  // 3) قص من أول { لآخر } (الأكثر فاعلية)
+  const first = cleaned.indexOf("{");
+  const last = cleaned.lastIndexOf("}");
+  if (first !== -1 && last !== -1 && last > first) {
+    const slice = cleaned.slice(first, last + 1);
+    try {
+      const obj = JSON.parse(slice);
+      if (obj && typeof obj === "object") return obj;
+    } catch {}
+  }
+
+  return null;
+}
+
 async function callOpenAI(input) {
   const apiResp = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -95,7 +130,6 @@ function modePrompt(mode) {
   return "وضعك: عام.";
 }
 
-// ===== Server =====
 const server = http.createServer(async (req, res) => {
   const parsed = url.parse(req.url, true);
   const pathname = parsed.pathname;
@@ -125,7 +159,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // ---- TALK (JSON) ----
+  // TALK
   if (req.method === "GET" && pathname === "/talk") {
     const msg = (parsed.query.msg || "").toString().trim();
     const mode = (parsed.query.mode || "general").toString();
@@ -148,15 +182,15 @@ const server = http.createServer(async (req, res) => {
     while (memory.length > 12) memory.shift();
 
     const jsonInstruction = `
-ارجع النتيجة بصيغة JSON فقط (بدون أي نص خارج JSON):
+ارجع JSON فقط (بدون Markdown، بدون \`\`\`):
 {
   "reply": "نص الرد",
   "tag": "advice|warning|info|answer",
-  "why": "سطر واحد يشرح سبب الرد (اختياري)"
+  "why": "سطر واحد (اختياري)"
 }
 قواعد tag:
 - advice إذا في خطوات/نصائح
-- warning إذا في تحذير سلامة/خطر/ضرورة مختص
+- warning إذا في تحذير أو ضرورة مختص
 - info إذا معلومات عامة
 - answer إذا جواب مباشر
 "why" فقط إذا explain=1 وإلا فارغ.
@@ -166,29 +200,24 @@ const server = http.createServer(async (req, res) => {
       system,
       { role: "system", content: modeLine },
       ...memory,
-      {
-        role: "system",
-        content: jsonInstruction + (explain ? "\nexplain=1 املأ why." : "\nexplain=0 خلي why فارغ."),
-      },
+      { role: "system", content: jsonInstruction + (explain ? "\nexplain=1 املأ why." : "\nexplain=0 خلي why فارغ.") },
     ];
 
     try {
       const raw = await callOpenAI(input);
 
-      let data;
-      try {
-        data = JSON.parse(raw);
-      } catch {
-        data = { reply: raw, tag: "answer", why: "" };
-      }
+      // ✅ استخدم parser قوي
+      const parsedObj = safeParseModelJson(raw);
+
+      const data = parsedObj || { reply: raw, tag: "answer", why: "" };
 
       memory.push({ role: "assistant", content: data.reply || raw });
       while (memory.length > 12) memory.shift();
 
       sendJson(res, 200, {
-        reply: data.reply || raw,
-        tag: data.tag || "answer",
-        why: explain ? (data.why || "") : "",
+        reply: (data.reply || raw).toString(),
+        tag: (data.tag || "answer").toString(),
+        why: explain ? (data.why || "").toString() : "",
       });
     } catch (e) {
       sendJson(res, 500, { reply: "❌ " + String(e), tag: "error", why: "" });
@@ -196,7 +225,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // ---- VISION (JSON) ----
+  // VISION
   if (req.method === "POST" && pathname === "/vision") {
     try {
       const body = await readJsonBody(req);
@@ -212,14 +241,14 @@ const server = http.createServer(async (req, res) => {
       const modeLine = modePrompt(mode);
 
       const prompt =
-        "حلل الصورة: صف ما ترى بدقة. إذا الصورة لنبتة/شجرة وفيها مشكلة (اصفرار/ذبول/آفة/تعفن)، أعطِ سبب محتمل ونصيحة عامة آمنة قصيرة. لا تعطي تشخيص نهائي، وخليها إرشادات عامة.";
+        "حلل الصورة: صف ما ترى بدقة. إذا الصورة لنبتة/شجرة وفيها مشكلة (اصفرار/ذبول/آفة/تعفن)، أعطِ سبب محتمل ونصيحة عامة آمنة قصيرة. لا تعطي تشخيص نهائي.";
 
       const jsonInstruction = `
-ارجع JSON فقط:
+ارجع JSON فقط (بدون Markdown، بدون \`\`\`):
 {
   "reply": "التحليل",
   "tag": "advice|warning|info|answer",
-  "why": "سطر واحد يشرح سبب التحليل (اختياري)"
+  "why": "سطر واحد (اختياري)"
 }
 "why" فقط إذا explain=1 وإلا فارغ.
 `;
@@ -234,25 +263,18 @@ const server = http.createServer(async (req, res) => {
             { type: "input_image", image_url: dataUrl },
           ],
         },
-        {
-          role: "system",
-          content: jsonInstruction + (explain ? "\nexplain=1 املأ why." : "\nexplain=0 خلي why فارغ."),
-        },
+        { role: "system", content: jsonInstruction + (explain ? "\nexplain=1 املأ why." : "\nexplain=0 خلي why فارغ.") },
       ];
 
       const raw = await callOpenAI(input);
 
-      let data;
-      try {
-        data = JSON.parse(raw);
-      } catch {
-        data = { reply: raw, tag: "info", why: "" };
-      }
+      const parsedObj = safeParseModelJson(raw);
+      const data = parsedObj || { reply: raw, tag: "info", why: "" };
 
       sendJson(res, 200, {
-        reply: data.reply || raw,
-        tag: data.tag || "info",
-        why: explain ? (data.why || "") : "",
+        reply: (data.reply || raw).toString(),
+        tag: (data.tag || "info").toString(),
+        why: explain ? (data.why || "").toString() : "",
       });
     } catch (e) {
       if (String(e).includes("Payload too large")) {
@@ -264,19 +286,18 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // ---- PROFESSIONAL TTS (MP3) ----
+  // TTS
   if (req.method === "POST" && pathname === "/tts") {
     try {
       const body = await readJsonBody(req);
       let text = (body.text || "").toString().trim();
-      const voice = (body.voice || "marin").toString(); // marin/cedar ممتازين :contentReference[oaicite:1]{index=1}
+      const voice = (body.voice || "marin").toString();
 
       if (!text) {
         sendText(res, 400, "❌ نص فارغ");
         return;
       }
 
-      // حد طول النص عشان ما تطول مدة التوليد
       if (text.length > 900) text = text.slice(0, 900);
 
       const ttsResp = await fetch("https://api.openai.com/v1/audio/speech", {
@@ -291,7 +312,7 @@ const server = http.createServer(async (req, res) => {
           input: text,
           format: "mp3",
         }),
-      }); // :contentReference[oaicite:2]{index=2}
+      });
 
       if (!ttsResp.ok) {
         const err = await ttsResp.text();
@@ -311,7 +332,6 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 404
   sendText(res, 404, "Not found");
 });
 
