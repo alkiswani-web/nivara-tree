@@ -208,12 +208,14 @@
   async function resetMemory(){
     try{
       await fetch("/reset");
-      chat.push({ role:"bot", text:"✅ مسحت ذاكرة السيرفر (السياق)", tag:"info", why:"", mode:modeEl.value });
-      lastBotReply = "✅ مسحت ذاكرة السيرفر (السياق)";
+      const msg = "✅ مسحت ذاكرة السيرفر (السياق)";
+      chat.push({ role:"bot", text: msg, tag:"info", why:"", mode: modeEl.value });
+      lastBotReply = msg;
       render();
     }catch{
-      chat.push({ role:"bot", text:"❌ ما قدرت أمسح ذاكرة السيرفر", tag:"warning", why:"", mode:modeEl.value });
-      lastBotReply = "❌ ما قدرت أمسح ذاكرة السيرفر";
+      const msg = "❌ ما قدرت أمسح ذاكرة السيرفر";
+      chat.push({ role:"bot", text: msg, tag:"warning", why:"", mode: modeEl.value });
+      lastBotReply = msg;
       render();
     }
   }
@@ -230,9 +232,18 @@
     inputEl.value = "";
 
     const res = await fetch(`/talk?msg=${encodeURIComponent(text)}&mode=${encodeURIComponent(mode)}&explain=${explain}`);
+
+    // ✅ هنا التعديل المهم: نقرأ JSON ونستخدم reply فقط
     const data = await res.json();
 
-    chat.push({ role:"bot", text: data.reply, tag: data.tag, why: data.why, mode });
+    chat.push({
+      role:"bot",
+      text: data.reply || "❌ ما وصل reply",
+      tag: data.tag || "answer",
+      why: data.why || "",
+      mode
+    });
+
     lastBotReply = data.reply || "";
     render();
   }
@@ -263,8 +274,17 @@
       body: JSON.stringify({ image: dataUrl, mode, explain })
     });
 
+    // ✅ نفس الفكرة: نقرأ JSON ونستخدم reply فقط
     const data = await res.json();
-    chat.push({ role:"bot", text: data.reply, tag: data.tag, why: data.why, mode });
+
+    chat.push({
+      role:"bot",
+      text: data.reply || "❌ ما وصل reply",
+      tag: data.tag || "info",
+      why: data.why || "",
+      mode
+    });
+
     lastBotReply = data.reply || "";
     render();
   }
