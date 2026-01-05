@@ -3,35 +3,37 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>🌳 Nivara — تحدث مع الشجرة</title>
+  <title>Nivara — تحدث مع الشجرة</title>
   <style>
-    body{font-family:system-ui;background:#f4f7f5;max-width:780px;margin:28px auto;padding:14px;}
-    .card{background:#fff;border:1px solid #e6e6e6;border-radius:16px;padding:16px;box-shadow:0 6px 18px rgba(0,0,0,0.06);}
-    .header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;}
-    .title{display:flex;align-items:center;gap:10px;}
-    .tree{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:#e6f2ec;font-size:24px;}
+    body{font-family:system-ui;background:#f4f7f5;max-width:900px;margin:28px auto;padding:14px}
+    .card{background:#fff;border:1px solid #e6e6e6;border-radius:16px;padding:16px;box-shadow:0 6px 18px rgba(0,0,0,.06)}
+    .header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+    .title{display:flex;align-items:center;gap:10px}
+    .tree{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:#e6f2ec;font-size:24px}
     h2{margin:0;font-size:20px}
     .sub{margin:0;color:#666;font-size:13px}
-    .chat{background:#f7faf8;border:1px solid #e8eeea;border-radius:14px;padding:12px;height:320px;overflow:auto;white-space:pre-wrap;}
-    .msg{margin:10px 0;line-height:1.5;}
-    .me{color:#111}
-    .bot{color:#0b5}
-    .meta{margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
-    .chip{display:inline-block;padding:3px 8px;border-radius:999px;font-size:12px;border:1px solid #ddd;background:#fff;}
-    .chip.advice{border-color:#0b5;}
-    .chip.warning{border-color:#d33;}
-    .chip.info{border-color:#369;}
-    .chip.answer{border-color:#888;}
-    .why{font-size:12px;color:#555;background:#fff;border:1px dashed #ddd;border-radius:10px;padding:8px;}
-    .row{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;align-items:center;}
-    input[type="text"]{flex:1;min-width:220px;padding:12px;font-size:16px;border-radius:12px;border:1px solid #d7dfda;outline:none;}
-    input[type="file"]{width:100%;margin-top:10px;}
-    button{padding:12px 14px;border:0;border-radius:12px;cursor:pointer;font-size:15px;}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+    input[type="text"]{flex:1;min-width:240px;padding:12px;font-size:16px;border-radius:12px;border:1px solid #d7dfda;outline:none}
+    input[type="file"]{width:100%;margin-top:8px}
+    button{padding:12px 14px;border:0;border-radius:12px;cursor:pointer;font-size:15px}
     .btn-main{background:#0b5;color:#fff}
     .btn-ghost{background:#eef3f0}
-    select{padding:10px;border-radius:12px;border:1px solid #d7dfda;background:#fff;}
-    label{font-size:13px;color:#444;display:flex;gap:8px;align-items:center;}
+    select{padding:10px;border-radius:12px;border:1px solid #d7dfda;background:#fff}
+    label{font-size:13px;color:#444;display:flex;gap:8px;align-items:center}
+    .chat{background:#f7faf8;border:1px solid #e8eeea;border-radius:14px;padding:12px;height:360px;overflow:auto;white-space:pre-wrap}
+    .msg{margin:10px 0;line-height:1.55}
+    .me{color:#111}
+    .bot{color:#0b5}
+    .meta{margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .chip{display:inline-block;padding:3px 8px;border-radius:999px;font-size:12px;border:1px solid #ddd;background:#fff}
+    .chip.advice{border-color:#0b5}
+    .chip.warning{border-color:#d33}
+    .chip.info{border-color:#369}
+    .chip.answer{border-color:#888}
+    .why{font-size:12px;color:#555;background:#fff;border:1px dashed #ddd;border-radius:10px;padding:8px;margin-top:6px}
     .hint{color:#666;font-size:12px;margin-top:10px}
+    .split{display:flex;gap:10px;flex-wrap:wrap}
+    .split > div{flex:1;min-width:260px}
   </style>
 </head>
 
@@ -42,15 +44,15 @@
         <div class="tree">🌳</div>
         <div>
           <h2>Nivara — تحدث مع الشجرة</h2>
-          <p class="sub">Context Mode + Highlights + Explainable AI + Vision + Pro TTS</p>
+          <p class="sub">نص + صورة + (اختياري) تفسير + صوت احترافي</p>
         </div>
       </div>
 
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <div class="row" style="margin-top:0">
         <button class="btn-ghost" onclick="playProVoice()">🔊 صوت احترافي</button>
-        <button class="btn-ghost" onclick="stopProAudio()">⏹ إيقاف الصوت</button>
+        <button class="btn-ghost" onclick="stopProAudio()">⏹ إيقاف</button>
         <button class="btn-ghost" onclick="clearChat()">مسح المحادثة</button>
-        <button class="btn-ghost" onclick="resetMemory()">Reset ذاكرة السيرفر</button>
+        <button class="btn-ghost" onclick="resetMemory()">Reset ذاكرة</button>
       </div>
     </div>
 
@@ -58,13 +60,13 @@
       <select id="mode">
         <option value="general">🌳 عام</option>
         <option value="teach">🌱 تعليمي</option>
-        <option value="eco">🌿 بيئي/زراعي</option>
+        <option value="eco">🌿 زراعي/بيئي</option>
         <option value="coach">🧠 إرشادي</option>
       </select>
 
       <label>
         <input type="checkbox" id="explain" />
-        Explain (ليش الرد؟)
+        تفسير (ليش الرد؟)
       </label>
 
       <select id="voice">
@@ -73,22 +75,28 @@
       </select>
     </div>
 
-    <div id="chat" class="chat"></div>
+    <div class="split">
+      <div>
+        <div id="chat" class="chat"></div>
 
-    <div class="row">
-      <input id="msg" type="text" placeholder="اكتب كلامك هنا..." onkeydown="if(event.key==='Enter'){talk()}" />
-      <button class="btn-main" onclick="talk()">احكي 🌿</button>
-    </div>
+        <div class="row">
+          <input id="msg" type="text" placeholder="اكتب سؤالك..." onkeydown="if(event.key==='Enter'){talk()}" />
+          <button class="btn-main" onclick="talk()">احكي 🌿</button>
+        </div>
 
-    <div style="margin-top:12px">
-      <input type="file" id="imageInput" accept="image/*" />
-      <div class="row">
-        <button class="btn-ghost" onclick="sendImage()">حلّل الصورة 📷</button>
+        <div class="hint">الصوت الاحترافي لا يعمل تلقائيًا ✅ (فقط عند ضغط زر 🔊).</div>
       </div>
-    </div>
 
-    <div class="hint">
-      الصوت الاحترافي لا يعمل تلقائيًا ✅ — فقط عند ضغط زر 🔊 “صوت احترافي”.
+      <div>
+        <div style="padding:10px;border:1px solid #e8eeea;border-radius:14px;background:#fbfdfc">
+          <div style="font-weight:700;margin-bottom:8px">تحليل صورة الشجرة 📷</div>
+          <input type="file" id="imageInput" accept="image/*" />
+          <div class="row">
+            <button class="btn-ghost" onclick="sendImage()">حلّل الصورة</button>
+          </div>
+          <div class="hint">نصيحة: صورة واضحة مع إضاءة جيدة تعطي نتيجة أفضل.</div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -100,43 +108,44 @@
   const explainEl = document.getElementById("explain");
   const voiceEl = document.getElementById("voice");
 
-  const key = "nivara_chat_v4";
-  const chat = JSON.parse(localStorage.getItem(key) || "[]");
+  const storageKey = "nivara_chat_final_v1";
+  const chat = JSON.parse(localStorage.getItem(storageKey) || "[]");
 
   let lastBotReply = "";
   let proAudio = null;
 
+  function tagLabel(tag){
+    if(tag === "advice") return "🌱 نصيحة";
+    if(tag === "warning") return "⚠️ تحذير";
+    if(tag === "info") return "ℹ️ معلومة";
+    return "✅ إجابة";
+  }
+
   function render(){
     chatEl.textContent = "";
-    for (const m of chat){
+    for(const m of chat){
       const wrap = document.createElement("div");
       wrap.className = "msg " + (m.role === "me" ? "me" : "bot");
 
       const text = document.createElement("div");
-      text.textContent = (m.role === "me" ? "أنا: " : "Nivara: ") + m.text;
+      text.textContent = (m.role === "me" ? "أنا: " : "Nivara: ") + (m.text || "");
       wrap.appendChild(text);
 
       if(m.role === "bot"){
         const meta = document.createElement("div");
         meta.className = "meta";
 
-        if(m.tag){
-          const chip = document.createElement("span");
-          chip.className = "chip " + m.tag;
-          chip.textContent =
-            m.tag === "advice" ? "🌱 نصيحة" :
-            m.tag === "warning" ? "⚠️ تحذير" :
-            m.tag === "info" ? "ℹ️ معلومة" :
-            "✅ إجابة";
-          meta.appendChild(chip);
-        }
+        const t = document.createElement("span");
+        t.className = "chip " + (m.tag || "answer");
+        t.textContent = tagLabel(m.tag || "answer");
+        meta.appendChild(t);
 
         if(m.mode){
           const chip2 = document.createElement("span");
           chip2.className = "chip";
           chip2.textContent =
             m.mode === "teach" ? "وضع: تعليمي" :
-            m.mode === "eco" ? "وضع: بيئي" :
+            m.mode === "eco" ? "وضع: زراعي" :
             m.mode === "coach" ? "وضع: إرشادي" : "وضع: عام";
           meta.appendChild(chip2);
         }
@@ -154,7 +163,7 @@
       chatEl.appendChild(wrap);
     }
     chatEl.scrollTop = chatEl.scrollHeight;
-    localStorage.setItem(key, JSON.stringify(chat));
+    localStorage.setItem(storageKey, JSON.stringify(chat));
   }
 
   function stopProAudio(){
@@ -172,16 +181,12 @@
       alert("ما في رد لتشغيله. احكي مع الشجرة أولاً.");
       return;
     }
-
     stopProAudio();
 
     const res = await fetch("/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        text: lastBotReply,
-        voice: voiceEl.value
-      })
+      body: JSON.stringify({ text: lastBotReply, voice: voiceEl.value })
     });
 
     if(!res.ok){
@@ -192,7 +197,6 @@
 
     const blob = await res.blob();
     const audioUrl = URL.createObjectURL(blob);
-
     proAudio = new Audio(audioUrl);
     proAudio.play();
     proAudio.onended = () => URL.revokeObjectURL(audioUrl);
@@ -208,16 +212,23 @@
   async function resetMemory(){
     try{
       await fetch("/reset");
-      const msg = "✅ مسحت ذاكرة السيرفر (السياق)";
+      const msg = "✅ تم مسح ذاكرة الشجرة (السياق)";
       chat.push({ role:"bot", text: msg, tag:"info", why:"", mode: modeEl.value });
       lastBotReply = msg;
       render();
     }catch{
-      const msg = "❌ ما قدرت أمسح ذاكرة السيرفر";
+      const msg = "❌ فشل مسح ذاكرة الشجرة";
       chat.push({ role:"bot", text: msg, tag:"warning", why:"", mode: modeEl.value });
       lastBotReply = msg;
       render();
     }
+  }
+
+  // ✅ دالة مساعدة: تضمن إننا نقرأ reply فقط حتى لو صار خطأ
+  function safeReply(data){
+    if(data && typeof data === "object" && typeof data.reply === "string") return data.reply;
+    if(typeof data === "string") return data; // احتياط
+    return "❌ ما وصل رد صحيح من السيرفر";
   }
 
   async function talk(){
@@ -231,21 +242,26 @@
     render();
     inputEl.value = "";
 
-    const res = await fetch(`/talk?msg=${encodeURIComponent(text)}&mode=${encodeURIComponent(mode)}&explain=${explain}`);
+    try{
+      const res = await fetch(`/talk?msg=${encodeURIComponent(text)}&mode=${encodeURIComponent(mode)}&explain=${explain}`);
+      const data = await res.json();
 
-    // ✅ هنا التعديل المهم: نقرأ JSON ونستخدم reply فقط
-    const data = await res.json();
+      const reply = safeReply(data);
+      chat.push({
+        role:"bot",
+        text: reply,                // ✅ فقط reply
+        tag: (data?.tag || "answer"),
+        why: (explain === "1" ? (data?.why || "") : ""),
+        mode
+      });
 
-    chat.push({
-      role:"bot",
-      text: data.reply || "❌ ما وصل reply",
-      tag: data.tag || "answer",
-      why: data.why || "",
-      mode
-    });
-
-    lastBotReply = data.reply || "";
-    render();
+      lastBotReply = reply;
+      render();
+    }catch(e){
+      chat.push({ role:"bot", text:"❌ صار خطأ بالاتصال", tag:"warning", why:String(e), mode });
+      lastBotReply = "";
+      render();
+    }
   }
 
   async function sendImage(){
@@ -261,32 +277,38 @@
     chat.push({ role:"me", text: "📷 رفعت صورة: " + file.name, mode });
     render();
 
-    const dataUrl = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = () => reject(new Error("File read failed"));
-      reader.readAsDataURL(file);
-    });
+    try{
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error("فشل قراءة الصورة"));
+        reader.readAsDataURL(file);
+      });
 
-    const res = await fetch("/vision", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image: dataUrl, mode, explain })
-    });
+      const res = await fetch("/vision", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: dataUrl, mode, explain })
+      });
 
-    // ✅ نفس الفكرة: نقرأ JSON ونستخدم reply فقط
-    const data = await res.json();
+      const data = await res.json();
+      const reply = safeReply(data);
 
-    chat.push({
-      role:"bot",
-      text: data.reply || "❌ ما وصل reply",
-      tag: data.tag || "info",
-      why: data.why || "",
-      mode
-    });
+      chat.push({
+        role:"bot",
+        text: reply,                // ✅ فقط reply
+        tag: (data?.tag || "info"),
+        why: (explain === "1" ? (data?.why || "") : ""),
+        mode
+      });
 
-    lastBotReply = data.reply || "";
-    render();
+      lastBotReply = reply;
+      render();
+    }catch(e){
+      chat.push({ role:"bot", text:"❌ صار خطأ بتحليل الصورة", tag:"warning", why:String(e), mode });
+      lastBotReply = "";
+      render();
+    }
   }
 
   render();
