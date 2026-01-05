@@ -12,7 +12,7 @@
     .tree{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:#e6f2ec;font-size:24px;}
     h2{margin:0;font-size:20px}
     .sub{margin:0;color:#666;font-size:13px}
-    .chat{background:#f7faf8;border:1px solid #e8eeea;border-radius:14px;padding:12px;height:300px;overflow:auto;white-space:pre-wrap;}
+    .chat{background:#f7faf8;border:1px solid #e8eeea;border-radius:14px;padding:12px;height:320px;overflow:auto;white-space:pre-wrap;}
     .msg{margin:10px 0;line-height:1.5;}
     .me{color:#111}
     .bot{color:#0b5}
@@ -42,12 +42,13 @@
         <div class="tree">🌳</div>
         <div>
           <h2>Nivara — تحدث مع الشجرة</h2>
-          <p class="sub">Context Mode + Highlights + Explainable AI + Vision</p>
+          <p class="sub">Context Mode + Highlights + Explainable AI + Vision + Pro TTS</p>
         </div>
       </div>
 
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn-ghost" onclick="stopSpeak()">إيقاف الصوت</button>
+        <button class="btn-ghost" onclick="playProVoice()">🔊 صوت احترافي</button>
+        <button class="btn-ghost" onclick="stopProAudio()">⏹ إيقاف الصوت</button>
         <button class="btn-ghost" onclick="clearChat()">مسح المحادثة</button>
         <button class="btn-ghost" onclick="resetMemory()">Reset ذاكرة السيرفر</button>
       </div>
@@ -65,6 +66,11 @@
         <input type="checkbox" id="explain" />
         Explain (ليش الرد؟)
       </label>
+
+      <select id="voice">
+        <option value="marin">🎙️ marin</option>
+        <option value="cedar">🎙️ cedar</option>
+      </select>
     </div>
 
     <div id="chat" class="chat"></div>
@@ -82,8 +88,7 @@
     </div>
 
     <div class="hint">
-      جرّب تبدّل الوضع ثم اسأل نفس السؤال وشوف كيف الرد يتغير فورًا ✅  
-      
+      الصوت الاحترافي لا يعمل تلقائيًا ✅ — فقط عند ضغط زر 🔊 “صوت احترافي”.
     </div>
   </div>
 
@@ -93,9 +98,13 @@
   const fileEl  = document.getElementById("imageInput");
   const modeEl  = document.getElementById("mode");
   const explainEl = document.getElementById("explain");
+  const voiceEl = document.getElementById("voice");
 
-  const key = "nivara_chat_v3";
+  const key = "nivara_chat_v4";
   const chat = JSON.parse(localStorage.getItem(key) || "[]");
+
+  let lastBotReply = "";
+  let proAudio = null;
 
   function render(){
     chatEl.textContent = "";
@@ -148,20 +157,51 @@
     localStorage.setItem(key, JSON.stringify(chat));
   }
 
-  function stopSpeak(){ speechSynthesis.cancel(); }
+  function stopProAudio(){
+    try{
+      if(proAudio){
+        proAudio.pause();
+        proAudio.currentTime = 0;
+        proAudio = null;
+      }
+    }catch{}
+  }
 
-  function speak(text){
-    stopSpeak();
-    const utter = new SpeechSynthesisUtterance(text);
-    utter.lang = "ar-JO";
-    utter.rate = 0.9;
-    utter.pitch = 1;
-    speechSynthesis.speak(utter);
+  async function playProVoice(){
+    if(!lastBotReply){
+      alert("ما في رد لتشغيله. احكي مع الشجرة أولاً.");
+      return;
+    }
+
+    stopProAudio();
+
+    const res = await fetch("/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: lastBotReply,
+        voice: voiceEl.value
+      })
+    });
+
+    if(!res.ok){
+      const t = await res.text();
+      alert("TTS Error: " + t);
+      return;
+    }
+
+    const blob = await res.blob();
+    const audioUrl = URL.createObjectURL(blob);
+
+    proAudio = new Audio(audioUrl);
+    proAudio.play();
+    proAudio.onended = () => URL.revokeObjectURL(audioUrl);
   }
 
   function clearChat(){
-    stopSpeak();
+    stopProAudio();
     chat.length = 0;
+    lastBotReply = "";
     render();
   }
 
@@ -169,9 +209,11 @@
     try{
       await fetch("/reset");
       chat.push({ role:"bot", text:"✅ مسحت ذاكرة السيرفر (السياق)", tag:"info", why:"", mode:modeEl.value });
+      lastBotReply = "✅ مسحت ذاكرة السيرفر (السياق)";
       render();
     }catch{
       chat.push({ role:"bot", text:"❌ ما قدرت أمسح ذاكرة السيرفر", tag:"warning", why:"", mode:modeEl.value });
+      lastBotReply = "❌ ما قدرت أمسح ذاكرة السيرفر";
       render();
     }
   }
@@ -191,8 +233,8 @@
     const data = await res.json();
 
     chat.push({ role:"bot", text: data.reply, tag: data.tag, why: data.why, mode });
+    lastBotReply = data.reply || "";
     render();
-    speak(data.reply);
   }
 
   async function sendImage(){
@@ -223,8 +265,8 @@
 
     const data = await res.json();
     chat.push({ role:"bot", text: data.reply, tag: data.tag, why: data.why, mode });
+    lastBotReply = data.reply || "";
     render();
-    speak(data.reply);
   }
 
   render();
