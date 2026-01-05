@@ -3,10 +3,13 @@ const url = require("url");
 const fs = require("fs");
 const path = require("path");
 
-// ذاكرة محادثة بسيطة على السيرفر (آخر 12 رسالة)
-const memory = [];
+const memory = []; // آخر 12 رسالة
 
-// ===== Helpers =====
+function sendJson(res, status, obj) {
+  res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
+  res.end(JSON.stringify(obj));
+}
+
 function sendText(res, status, text) {
   res.writeHead(status, { "Content-Type": "text/plain; charset=utf-8" });
   res.end(text);
@@ -43,15 +46,12 @@ function extractOutputText(data) {
   if (typeof data?.output_text === "string" && data.output_text.trim()) {
     return data.output_text.trim();
   }
-
   const out = data?.output;
   if (!Array.isArray(out)) return "";
-
   let text = "";
   for (const item of out) {
-    const content = item?.content;
-    if (Array.isArray(content)) {
-      for (const c of content) {
+    if (Array.isArray(item?.content)) {
+      for (const c of item.content) {
         if (typeof c?.text === "string") text += c.text;
       }
     }
@@ -69,8 +69,8 @@ async function callOpenAI(input) {
     body: JSON.stringify({
       model: "gpt-5.1-chat-latest",
       input,
-      
       store: false,
+      // ⚠️ لا نستخدم temperature (غير مدعوم أحيانًا على هذا الموديل)
     }),
   });
 
@@ -83,12 +83,18 @@ async function callOpenAI(input) {
   return extractOutputText(data);
 }
 
-function dataUrlToImageUrl(dataUrl) {
-  // data:image/png;base64,AAAA...
-  // نرجعها كما هي (Data URL) لأن الـAPI يقبل image_url كـ data URL
-  if (typeof dataUrl !== "string") return "";
-  if (!dataUrl.startsWith("data:image/")) return "";
-  return dataUrl;
+function modePrompt(mode) {
+  // Context Mode
+  if (mode === "teach") {
+    return "وضعك: تعليمي. اشرح بشكل واضح وبنقاط قصيرة، واذكر مصطلح إنجليزي مهم بين قوسين عند الحاجة.";
+  }
+  if (mode === "eco") {
+    return "وضعك: بيئي/زراعي. ركّز على نصائح نباتية واقعية، تحذيرات آمنة، وخطوات عملية.";
+  }
+  if (mode === "coach") {
+    return "وضعك: إرشادي. ردود داعمة وعملية، بدون علاج نفسي أو تشخيص طبي، وخليك لطيف ومباشر.";
+  }
+  return "وضعك: عام.";
 }
 
 // ===== Server =====
@@ -96,7 +102,7 @@ const server = http.createServer(async (req, res) => {
   const parsed = url.parse(req.url, true);
   const pathname = parsed.pathname;
 
-  // ---- UI ----
+  // UI
   if (req.method === "GET" && pathname === "/") {
     try {
       const html = fs.readFileSync(path.join(__dirname, "public", "index.html"));
@@ -108,102 +114,164 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // ---- Reset memory ----
+  // Reset memory
   if (req.method === "GET" && pathname === "/reset") {
     memory.length = 0;
     sendText(res, 200, "✅ تم مسح ذاكرة الشجرة");
     return;
   }
 
-  // لازم المفتاح لأي AI route
+  // API key required
   if (!process.env.OPENAI_API_KEY && (pathname === "/talk" || pathname === "/vision")) {
-    sendText(res, 500, "❌ OPENAI_API_KEY مش موجود. حطّه قبل تشغيل السيرفر.");
+    sendText(res, 500, "❌ OPENAI_API_KEY مش موجود على السيرفر");
     return;
   }
 
-  // ---- Talk (Text) ----
+  // TALK -> JSON response (reply + tag + reason?)
   if (req.method === "GET" && pathname === "/talk") {
     const msg = (parsed.query.msg || "").toString().trim();
+    const mode = (parsed.query.mode || "general").toString();
+    const explain = (parsed.query.explain || "0").toString() === "1";
 
     if (!msg) {
-      sendText(res, 200, "❌ اكتب رسالتك أولاً");
+      sendJson(res, 200, { reply: "❌ اكتب رسالتك أولاً", tag: "error", why: "" });
       return;
     }
 
     const system = {
       role: "system",
       content:
-        "أنت شجرة حكيمة وودودة اسمها Nivara. تحكي عربي أردني بسيط ولمسة شاعرية خفيفة. الرد 5-10 سطور. اسأل سؤال متابعة واحد فقط إذا لازم.",
+        "أنت شجرة حكيمة وودودة اسمها Nivara. تحكي عربي أردني بسيط ولمسة شاعرية خفيفة. ممنوع تعطي نصائح خطرة أو تعليمات ضارة. إذا موضوع طبي/قانوني: نصيحة عامة + توجيه لمختص. اجعل الرد مختصر 6-10 أسطر.",
     };
 
+    const modeLine = modePrompt(mode);
+
+    // نخزن المستخدم
     memory.push({ role: "user", content: msg });
     while (memory.length > 12) memory.shift();
 
-    const input = [system, ...memory];
+    // نطلب من الـAI يرجع JSON منظم
+    const jsonInstruction = `
+ارجع النتيجة بصيغة JSON فقط (بدون أي نص خارج JSON) بالشكل التالي:
+{
+  "reply": "نص الرد",
+  "tag": "advice|warning|info|answer",
+  "why": "سطر واحد يشرح سبب الرد (اختياري)"
+}
+
+قواعد:
+- tag = advice إذا في خطوات/نصائح
+- tag = warning إذا في تحذير سلامة/خطر/ضرورة مختص
+- tag = info إذا معلومات عامة
+- tag = answer إذا جواب مباشر بدون نصائح كثيرة
+- "why" املأه فقط إذا المستخدم طلب explain = 1 وإلا خليه فارغ.
+- حافظ على شخصية Nivara.
+`;
+
+    const input = [
+      system,
+      { role: "system", content: modeLine },
+      ...memory,
+      { role: "system", content: jsonInstruction + (explain ? "\nالمستخدم يريد explain=1، املأ why." : "\nexplain=0، خلي why فارغ.") },
+    ];
 
     try {
-      const reply =
-        (await callOpenAI(input)) || "❌ ما قدرت أطلع رد. جرّب مرة ثانية.";
-      memory.push({ role: "assistant", content: reply });
+      const raw = await callOpenAI(input);
+
+      // محاولة parse JSON (مع fallback)
+      let data;
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        data = { reply: raw, tag: "answer", why: "" };
+      }
+
+      // نخزن رد الشجرة كنص فقط بالذاكرة (مشان السياق)
+      memory.push({ role: "assistant", content: data.reply || raw });
       while (memory.length > 12) memory.shift();
 
-      sendText(res, 200, reply);
+      sendJson(res, 200, {
+        reply: data.reply || raw,
+        tag: data.tag || "answer",
+        why: explain ? (data.why || "") : "",
+      });
     } catch (e) {
-      sendText(res, 500, "❌ " + String(e));
+      sendJson(res, 500, { reply: "❌ " + String(e), tag: "error", why: "" });
     }
     return;
   }
 
-  // ---- Vision (Image) ----
+  // VISION -> JSON response (reply + tag + why?)
   if (req.method === "POST" && pathname === "/vision") {
     try {
       const body = await readJsonBody(req);
       const dataUrl = (body.image || "").toString();
+      const mode = (body.mode || "general").toString();
+      const explain = String(body.explain || "0") === "1";
 
-      const imageUrl = dataUrlToImageUrl(dataUrl);
-      if (!imageUrl) {
-        sendText(res, 400, "❌ الصورة لازم تكون Data URL مثل: data:image/...;base64,...");
+      if (!dataUrl.startsWith("data:image/")) {
+        sendJson(res, 400, { reply: "❌ ارفع صورة صحيحة", tag: "error", why: "" });
         return;
       }
 
+      const modeLine = modePrompt(mode);
+
       const prompt =
-        "حلل الصورة: صف ما ترى بدقة. إذا الصورة لنبتة/شجرة وفيها مشكلة (اصفرار، ذبول، آفة)، أعطِ سبب محتمل ونصيحة عامة قصيرة. احكي بأسلوب Nivara وبعربي بسيط.";
+        "حلل الصورة: صف ما ترى بدقة. إذا الصورة لنبتة/شجرة وفيها مشكلة (اصفرار/ذبول/آفة/تعفن)، أعطِ سبب محتمل ونصيحة عامة آمنة قصيرة. لا تعطي تشخيص نهائي، وخليها إرشادات عامة.";
+
+      const jsonInstruction = `
+ارجع JSON فقط:
+{
+  "reply": "التحليل",
+  "tag": "advice|warning|info|answer",
+  "why": "سطر واحد يشرح سبب التحليل (اختياري)"
+}
+طبق نفس قواعد tag السابقة.
+"why" فقط إذا explain=1 وإلا فارغ.
+`;
 
       const input = [
+        { role: "system", content: "أنت Nivara: شجرة حكيمة." },
+        { role: "system", content: modeLine },
         {
           role: "user",
           content: [
             { type: "input_text", text: prompt },
-            // ✅ الطريقة الصحيحة: image_url (Data URL)
-            { type: "input_image", image_url: imageUrl },
+            { type: "input_image", image_url: dataUrl }, // ✅ Data URL
           ],
         },
+        { role: "system", content: jsonInstruction + (explain ? "\nexplain=1 املأ why." : "\nexplain=0 خلي why فارغ.") },
       ];
 
-      const reply =
-        (await callOpenAI(input)) || "❌ ما قدرت أحلل الصورة. جرّب صورة أوضح.";
+      const raw = await callOpenAI(input);
 
-      sendText(res, 200, reply);
+      let data;
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        data = { reply: raw, tag: "info", why: "" };
+      }
+
+      sendJson(res, 200, {
+        reply: data.reply || raw,
+        tag: data.tag || "info",
+        why: explain ? (data.why || "") : "",
+      });
     } catch (e) {
       if (String(e).includes("Payload too large")) {
-        sendText(res, 413, "❌ حجم الصورة كبير. جرّب صورة أصغر.");
+        sendJson(res, 413, { reply: "❌ حجم الصورة كبير. جرّب صورة أصغر.", tag: "warning", why: "" });
         return;
       }
-      sendText(res, 500, "❌ " + String(e));
+      sendJson(res, 500, { reply: "❌ " + String(e), tag: "error", why: "" });
     }
     return;
   }
 
-  // ---- 404 ----
+  // 404
   sendText(res, 404, "Not found");
 });
 
-// ✅ خلي البورت نفس اللي شغال عندك (3002)
 const PORT = process.env.PORT || 3002;
-
 server.listen(PORT, "0.0.0.0", () => {
   console.log("Server running on port " + PORT);
 });
-
-
-
