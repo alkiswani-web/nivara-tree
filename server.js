@@ -70,7 +70,6 @@ async function callOpenAI(input) {
       model: "gpt-5.1-chat-latest",
       input,
       store: false,
-      // ⚠️ لا نستخدم temperature (غير مدعوم أحيانًا على هذا الموديل)
     }),
   });
 
@@ -84,7 +83,6 @@ async function callOpenAI(input) {
 }
 
 function modePrompt(mode) {
-  // Context Mode
   if (mode === "teach") {
     return "وضعك: تعليمي. اشرح بشكل واضح وبنقاط قصيرة، واذكر مصطلح إنجليزي مهم بين قوسين عند الحاجة.";
   }
@@ -122,12 +120,12 @@ const server = http.createServer(async (req, res) => {
   }
 
   // API key required
-  if (!process.env.OPENAI_API_KEY && (pathname === "/talk" || pathname === "/vision")) {
+  if (!process.env.OPENAI_API_KEY && (pathname === "/talk" || pathname === "/vision" || pathname === "/tts")) {
     sendText(res, 500, "❌ OPENAI_API_KEY مش موجود على السيرفر");
     return;
   }
 
-  // TALK -> JSON response (reply + tag + reason?)
+  // ---- TALK (JSON) ----
   if (req.method === "GET" && pathname === "/talk") {
     const msg = (parsed.query.msg || "").toString().trim();
     const mode = (parsed.query.mode || "general").toString();
@@ -146,39 +144,37 @@ const server = http.createServer(async (req, res) => {
 
     const modeLine = modePrompt(mode);
 
-    // نخزن المستخدم
     memory.push({ role: "user", content: msg });
     while (memory.length > 12) memory.shift();
 
-    // نطلب من الـAI يرجع JSON منظم
     const jsonInstruction = `
-ارجع النتيجة بصيغة JSON فقط (بدون أي نص خارج JSON) بالشكل التالي:
+ارجع النتيجة بصيغة JSON فقط (بدون أي نص خارج JSON):
 {
   "reply": "نص الرد",
   "tag": "advice|warning|info|answer",
   "why": "سطر واحد يشرح سبب الرد (اختياري)"
 }
-
-قواعد:
-- tag = advice إذا في خطوات/نصائح
-- tag = warning إذا في تحذير سلامة/خطر/ضرورة مختص
-- tag = info إذا معلومات عامة
-- tag = answer إذا جواب مباشر بدون نصائح كثيرة
-- "why" املأه فقط إذا المستخدم طلب explain = 1 وإلا خليه فارغ.
-- حافظ على شخصية Nivara.
+قواعد tag:
+- advice إذا في خطوات/نصائح
+- warning إذا في تحذير سلامة/خطر/ضرورة مختص
+- info إذا معلومات عامة
+- answer إذا جواب مباشر
+"why" فقط إذا explain=1 وإلا فارغ.
 `;
 
     const input = [
       system,
       { role: "system", content: modeLine },
       ...memory,
-      { role: "system", content: jsonInstruction + (explain ? "\nالمستخدم يريد explain=1، املأ why." : "\nexplain=0، خلي why فارغ.") },
+      {
+        role: "system",
+        content: jsonInstruction + (explain ? "\nexplain=1 املأ why." : "\nexplain=0 خلي why فارغ."),
+      },
     ];
 
     try {
       const raw = await callOpenAI(input);
 
-      // محاولة parse JSON (مع fallback)
       let data;
       try {
         data = JSON.parse(raw);
@@ -186,7 +182,6 @@ const server = http.createServer(async (req, res) => {
         data = { reply: raw, tag: "answer", why: "" };
       }
 
-      // نخزن رد الشجرة كنص فقط بالذاكرة (مشان السياق)
       memory.push({ role: "assistant", content: data.reply || raw });
       while (memory.length > 12) memory.shift();
 
@@ -201,7 +196,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // VISION -> JSON response (reply + tag + why?)
+  // ---- VISION (JSON) ----
   if (req.method === "POST" && pathname === "/vision") {
     try {
       const body = await readJsonBody(req);
@@ -226,7 +221,6 @@ const server = http.createServer(async (req, res) => {
   "tag": "advice|warning|info|answer",
   "why": "سطر واحد يشرح سبب التحليل (اختياري)"
 }
-طبق نفس قواعد tag السابقة.
 "why" فقط إذا explain=1 وإلا فارغ.
 `;
 
@@ -237,10 +231,13 @@ const server = http.createServer(async (req, res) => {
           role: "user",
           content: [
             { type: "input_text", text: prompt },
-            { type: "input_image", image_url: dataUrl }, // ✅ Data URL
+            { type: "input_image", image_url: dataUrl },
           ],
         },
-        { role: "system", content: jsonInstruction + (explain ? "\nexplain=1 املأ why." : "\nexplain=0 خلي why فارغ.") },
+        {
+          role: "system",
+          content: jsonInstruction + (explain ? "\nexplain=1 املأ why." : "\nexplain=0 خلي why فارغ."),
+        },
       ];
 
       const raw = await callOpenAI(input);
@@ -263,6 +260,53 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       sendJson(res, 500, { reply: "❌ " + String(e), tag: "error", why: "" });
+    }
+    return;
+  }
+
+  // ---- PROFESSIONAL TTS (MP3) ----
+  if (req.method === "POST" && pathname === "/tts") {
+    try {
+      const body = await readJsonBody(req);
+      let text = (body.text || "").toString().trim();
+      const voice = (body.voice || "marin").toString(); // marin/cedar ممتازين :contentReference[oaicite:1]{index=1}
+
+      if (!text) {
+        sendText(res, 400, "❌ نص فارغ");
+        return;
+      }
+
+      // حد طول النص عشان ما تطول مدة التوليد
+      if (text.length > 900) text = text.slice(0, 900);
+
+      const ttsResp = await fetch("https://api.openai.com/v1/audio/speech", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini-tts",
+          voice,
+          input: text,
+          format: "mp3",
+        }),
+      }); // :contentReference[oaicite:2]{index=2}
+
+      if (!ttsResp.ok) {
+        const err = await ttsResp.text();
+        sendText(res, 500, "❌ TTS Error: " + err);
+        return;
+      }
+
+      const audioBuf = Buffer.from(await ttsResp.arrayBuffer());
+      res.writeHead(200, {
+        "Content-Type": "audio/mpeg",
+        "Cache-Control": "no-store",
+      });
+      res.end(audioBuf);
+    } catch (e) {
+      sendText(res, 500, "❌ " + String(e));
     }
     return;
   }
